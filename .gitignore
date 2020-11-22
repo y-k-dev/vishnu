@@ -2,6 +2,6 @@
 __pycache__/
 venv/
 
-# img/
-# json/
-# log/
+img/
+json/
+log/
