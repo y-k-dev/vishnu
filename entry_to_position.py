@@ -25,8 +25,9 @@ while True:
         if side == "CLOSE":
             bitflyer.close()
 
-            message.info("close retry")
             time.sleep(120)
+
+            message.info("close retry")
             bitflyer.close()
             message.info("close retry complete")
 
@@ -35,8 +36,9 @@ while True:
         else:  # side is BUY or SELL
             bitflyer.order(side=side)
 
-            message.info("order retry")
             time.sleep(120)
+
+            message.info("order retry")
             bitflyer.order(side=side)
             message.info("order retry complete")
 
