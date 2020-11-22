@@ -44,11 +44,15 @@ DATABASE = "tradingbot"
 bitflyer = bitflyer.API(api_key=Bitflyer.Api.value.KEY.value,
                         api_secret=Bitflyer.Api.value.SECRET.value)
 
+
+before_Date = None
 has_buy = False
 has_sell = False
 while True:
     long_ma_data = get_ma_data(LONG_TIME_FRAME, LONG_MA, "long_ma", True)
-    if long_ma_data is None:
+    Date = long_ma_data["Date"]
+
+    if before_Date == Date:
         continue
 
     short_ma_data = get_ma_data(SHORT_TIME_FRAME, SHORT_MA, "short_ma")
@@ -68,3 +72,5 @@ while True:
         save_entry(side="SELL")
         has_buy = False
         has_sell = True
+
+    before_Date = Date
