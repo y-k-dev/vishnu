@@ -2,10 +2,7 @@ import time
 import traceback
 from enum import Enum
 
-import numpy as np
-import pandas as pd
 import pybitflyer
-import requests
 
 from lib import math, message, repository
 
@@ -316,29 +313,45 @@ class API:
                 message.error(traceback.format_exc())
                 time.sleep(3)
 
-    @staticmethod
-    def get_historical_price(periods: int):
-        while True:
-            try:
-                periods = str(periods)
+    def get_historical_price(self, periods: int, tail: int, clean_db=False):
+        sql = """
+                select
+                    cast(op.date as datetime) as Date,
+                    op.price as Open,
+                    ba.High as High,
+                    ba.Low as Low,
+                    cl.price as Close
+                from
+                    (
+                        select
+                            max(price) as High,
+                            min(price) as Low,
+                            min(id) as open_id,
+                            max(id) as close_id,
+                            sec_to_time(time_to_sec(Date) - time_to_sec(Date) %{periods}) as intervals
+                        from
+                            execution_history
+                        group by
+                            intervals
+                        order by
+                            max(date) desc
+                        limit {tail}
+                    ) ba
+                    inner join
+                        execution_history op
+                    on  op.id = ba.open_id
+                    inner join
+                        execution_history cl
+                    on  cl.id = ba.close_id
+                order by
+                    Date
+                """.format(periods=periods, tail=tail)
 
-                url = "https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc"
-                params = {"periods": periods}
+        historical_price = repository.read_sql(database=self.DATABASE, sql=sql)
 
-                res = requests.get(url, params=params).json()
-                res = res["result"][periods]
-                res = np.array(res)
-
-                columns = [
-                    "Time",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume",
-                    "QuoteVolume"]
-
-                return pd.DataFrame(res, columns=columns)
-            except Exception:
-                message.error(traceback.format_exc())
-                time.sleep(3)
+        if not historical_price.empty and clean_db:
+            first_Date = historical_price.loc[0]["Date"]
+            sql = "delete from execution_history where date < '{first_Date}'"\
+                .format(first_Date=first_Date)
+            repository.execute(database=self.DATABASE, sql=sql, write=False)
+        return historical_price

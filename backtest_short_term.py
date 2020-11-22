@@ -3,6 +3,7 @@ import statistics
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 
 from lib import bitflyer, indicator, math
 from lib import pandas_option as pd_op
@@ -11,8 +12,25 @@ from lib.config import MA, Bitflyer, TimeFrame
 
 
 def get_historical_price(periods: int):
-    data = bitflyer.get_historical_price(periods=periods)
+    periods = str(periods)
 
+    url = "https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc"
+    params = {"periods": periods}
+
+    res = requests.get(url, params=params).json()
+    res = res["result"][periods]
+    res = np.array(res)
+
+    columns = [
+        "Time",
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume",
+        "QuoteVolume"]
+
+    data = pd.DataFrame(res, columns=columns)
     data = data.drop(columns="Volume")
     data = data.drop(columns="QuoteVolume")
 

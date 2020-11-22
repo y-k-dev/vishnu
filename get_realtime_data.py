@@ -20,7 +20,8 @@ secret = Bitflyer.Api.value.SECRET.value
 
 end_point = 'wss://ws.lightstream.bitflyer.com/json-rpc'
 
-public_channels = ['lightning_ticker_FX_BTC_JPY']
+public_channels = ['lightning_executions_FX_BTC_JPY',
+                   'lightning_ticker_FX_BTC_JPY']
 private_channels = []
 database = "tradingbot"
 # -------------------------------------
@@ -86,6 +87,20 @@ class bFwebsocket(object):
             params = messages["params"]
             channel = params["channel"]
             recept_data = params["message"]
+
+            if channel == "lightning_executions_FX_BTC_JPY":
+                for r in recept_data:
+                    date = r["exec_date"][:26]
+                    date = date.replace("T", " ").replace("Z", "")
+                    date = \
+                        dtdt.strptime(date, '%Y-%m-%d %H:%M:%S.%f')
+                    date = date + dt.timedelta(hours=9)
+                    side = r["side"]
+                    price = r["price"]
+                    size = str(r["size"])
+                    sql = "insert into execution_history values (null,'{date}','{side}',{price},'{size}')"\
+                        .format(date=date, side=side, price=price, size=size)
+                    repository.execute(database=database, sql=sql, log=False)
 
             if channel == "lightning_ticker_FX_BTC_JPY":
                 date = recept_data["timestamp"][:26]

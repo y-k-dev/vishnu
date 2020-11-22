@@ -1,14 +1,9 @@
-import time
-
 from lib import bitflyer, indicator, message, repository
 from lib.config import MA, Bitflyer, TimeFrame
 
 
-def get_historical_price(periods: int):
-    data = bitflyer.get_historical_price(periods=periods)
-
-    data = data.drop(columns="Volume")
-    data = data.drop(columns="QuoteVolume")
+def get_historical_price(periods: int, tail: int, clean_db=False):
+    data = bitflyer.get_historical_price(periods, tail, clean_db)
 
     data["Price"] = (data["Open"] +
                      data["High"] +
@@ -22,8 +17,11 @@ def get_historical_price(periods: int):
     return data
 
 
-def get_ma_data(periods: int, ma: int, column_name: str):
-    data = get_historical_price(periods=periods)
+def get_ma_data(periods: int, ma: int, column_name: str, clean_db=False):
+    data = get_historical_price(periods, ma * 2, clean_db)
+    if len(data) < 2:
+        return None
+
     data = indicator.add_ema(df=data, value=ma, column_name=column_name)
     data = data.drop(columns="Price")
     return data.iloc[len(data) - 2]
@@ -46,15 +44,11 @@ DATABASE = "tradingbot"
 bitflyer = bitflyer.API(api_key=Bitflyer.Api.value.KEY.value,
                         api_secret=Bitflyer.Api.value.SECRET.value)
 
-before_candle_Time = None
 has_buy = False
 has_sell = False
 while True:
-    long_ma_data = get_ma_data(LONG_TIME_FRAME, LONG_MA, "long_ma")
-    candle_Time = long_ma_data["Time"]
-
-    if before_candle_Time == candle_Time:
-        time.sleep(3)
+    long_ma_data = get_ma_data(LONG_TIME_FRAME, LONG_MA, "long_ma", True)
+    if long_ma_data is None:
         continue
 
     short_ma_data = get_ma_data(SHORT_TIME_FRAME, SHORT_MA, "short_ma")
@@ -74,5 +68,3 @@ while True:
         save_entry(side="SELL")
         has_buy = False
         has_sell = True
-
-    before_candle_Time = candle_Time
