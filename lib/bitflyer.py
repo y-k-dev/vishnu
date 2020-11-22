@@ -36,7 +36,7 @@ class API:
                 should_close = has_position \
                     and (side != position["side"] and position["size"] >= 0.01)
                 if should_close:
-                    self.close(side=side)
+                    self.close(entry_side=side)
                     continue
 
                 price = self.__get_order_price(side=side)
@@ -60,7 +60,7 @@ class API:
                 message.error(traceback.format_exc())
                 time.sleep(3)
 
-    def close(self, side="CLOSE"):
+    def close(self, entry_side="CLOSE"):
         message.info("close start")
         while True:
             try:
@@ -71,7 +71,7 @@ class API:
 
                 has_completed_close = \
                     position["side"] is None or position["size"] < 0.01 \
-                    or self.__has_changed_side(side=side)
+                    or self.__has_changed_side(side=entry_side)
                 if has_completed_close:
                     message.info("close complete")
                     return
