@@ -72,13 +72,13 @@ sudo apt install -y mpg123
 
 **レバレッジ**：  
 bitflyerでは4倍を設定してください。  
-このシステムは、レバレッジ2倍分のポジションサイズをとります。  
+このシステムは、レバレッジ1倍分のポジションサイズをとります。  
 ポジションサイズの変更は**lib/bitflyer.py**のコンストラクタで設定してください。  
 ```python:bitflyer.py
     def __init__(self, api_key, api_secret):
         self.api = pybitflyer.API(api_key=api_key, api_secret=api_secret)
         self.PRODUCT_CODE = "FX_BTC_JPY"
-        self.LEVERAGE = 2
+        self.LEVERAGE = 1
         self.DATABASE = "tradingbot"
 ```
 ---  
