@@ -3,14 +3,12 @@ from enum import Enum
 PROJECT_DIR = __file__.replace("/lib/config.py", "")
 
 
-class MA(Enum):
-    SHORT = 1
-    LONG = 2
-
-
-class TimeFrame(Enum):
-    SHORT = 60
-    LONG = 900
+class HistoricalPrice(Enum):
+    TIME_FRAME = 1  # minutes
+    CHANNEL_WIDTH = 10
+    VOLUME_MA = 10
+    DIFF_RATIO = 2
+    BACK_MIN = 5
 
 
 class DATABASE(Enum):

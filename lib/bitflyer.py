@@ -12,18 +12,13 @@ class API:
     def __init__(self, api_key, api_secret):
         self.api = pybitflyer.API(api_key=api_key, api_secret=api_secret)
         self.PRODUCT_CODE = "FX_BTC_JPY"
-        self.LEVERAGE = 4
+        self.LEVERAGE = 2
         self.DATABASE = "tradingbot"
 
     def order(self, side):
         message.info(side, "order start")
         while True:
             try:
-                has_completed_order = self.__has_changed_side(side=side)
-                if has_completed_order:
-                    message.info(side, "order complete")
-                    return
-
                 self.api.cancelallchildorders(
                     product_code=self.PRODUCT_CODE)
 
@@ -33,7 +28,7 @@ class API:
                 should_close = has_position \
                     and (side != position["side"] and position["size"] >= 0.01)
                 if should_close:
-                    self.close(entry_side=side)
+                    self.close()
                     continue
 
                 price = self.__get_order_price(side=side)
@@ -45,7 +40,11 @@ class API:
                     or self.__has_changed_side(side=side)
                 if has_completed_order:
                     message.info(side, "order complete")
-                    return
+                    order_side = side
+                    order_size = \
+                        self.__get_order_size(price=price, position_size=0)
+                    order_size = float(math.round_down(order_size, -2))
+                    return order_side, order_size
 
                 assert self.is_valid_side(side=side)
                 assert self.is_valid_size(size=size)
@@ -57,8 +56,9 @@ class API:
                 message.error(traceback.format_exc())
                 time.sleep(3)
 
-    def close(self, entry_side="CLOSE"):
+    def close(self):
         message.info("close start")
+        has_position = False
         while True:
             try:
                 self.api.cancelallchildorders(
@@ -67,11 +67,12 @@ class API:
                 position = self.__get_position()
 
                 has_completed_close = \
-                    position["side"] is None or position["size"] < 0.01 \
-                    or self.__has_changed_side(side=entry_side)
+                    position["side"] is None or position["size"] < 0.01
                 if has_completed_close:
                     message.info("close complete")
-                    return
+                    return has_position
+                else:
+                    has_position = True
 
                 side = self.__reverse_side(side=position["side"])
                 size = position["size"]
@@ -83,6 +84,42 @@ class API:
 
                 self.__send_order(side=side, size=size, price=price)
                 time.sleep(1)
+            except Exception:
+                message.error(traceback.format_exc())
+                time.sleep(3)
+
+    def position_validation(self, order_side, order_size):
+        while True:
+            try:
+                time.sleep(120)
+
+                if self.__has_changed_side(side=order_side):
+                    return
+
+                position = self.__get_position()
+                position_side = position["side"]
+                position_size = position["size"]
+
+                if position_side is None \
+                        or order_side != position_side:
+                    message.warning("invalidate position")
+                    self.order(order_side)
+                elif order_size * 0.5 >= position_size:
+                    message.warning("not enough position size")
+                    self.order(order_side)
+                elif order_size * 1.5 <= position_size:
+                    message.warning("close invalidate position size")
+                    side = self.__reverse_side(side=order_side)
+                    size = position_size - order_size
+                    price = self.__get_order_price(side=side)
+
+                    assert self.is_valid_side(side=side)
+                    assert self.is_valid_size(size=size)
+                    assert self.is_valid_price(price=price)
+
+                    self.__send_order(side=side, size=size, price=price)
+                else:
+                    return
             except Exception:
                 message.error(traceback.format_exc())
                 time.sleep(3)
@@ -103,7 +140,7 @@ class API:
                 return True
             latest_side = entry.at[0, "side"]
             if latest_side != side:
-                message.info("change side from", side, "to", latest_side)
+                message.warning("change side from", side, "to", latest_side)
                 return True
             else:
                 return False
@@ -293,6 +330,59 @@ class API:
             time.sleep(3)
             return False
 
+    def get_historical_price(self, limit):
+        sql = """
+                select
+                    cast(Time as datetime) as Date,
+                    Open,
+                    High,
+                    Low,
+                    Close
+                from
+                    (
+                        select
+                            date_format(
+                                cast(op.date as datetime),
+                                '%Y-%m-%d %H:%i:00'
+                            ) as Time,
+                            op.price as Open,
+                            ba.High as High,
+                            ba.Low as Low,
+                            cl.price as Close
+                        from
+                            (
+                                select
+                                    max(price) as High,
+                                    min(price) as Low,
+                                    min(id) as open_id,
+                                    max(id) as close_id
+                                from
+                                    execution_history
+                                group by
+                                    year(date),
+                                    month(date),
+                                    day(date),
+                                    hour(date),
+                                    minute(date)
+                                order by
+                                    max(date) desc
+                                limit
+                                    {limit}
+                            ) ba
+                            inner join execution_history op on op.id = ba.open_id
+                            inner join execution_history cl on cl.id = ba.close_id
+                    ) as ohlc
+                order by
+                    Time
+            """.format(limit=limit)
+
+        historical_price = repository.read_sql(database=self.DATABASE, sql=sql)
+        first_Date = historical_price.loc[0]["Date"]
+        sql = "delete from execution_history where date < '{first_Date}'"\
+            .format(first_Date=first_Date)
+        repository.execute(database=self.DATABASE, sql=sql, write=False)
+        return historical_price
+
     def __ticker(self):
         while True:
             try:
@@ -312,46 +402,3 @@ class API:
             except Exception:
                 message.error(traceback.format_exc())
                 time.sleep(3)
-
-    def get_historical_price(self, periods: int, tail: int, clean_db=False):
-        sql = """
-                select
-                    cast(op.date as datetime) as Date,
-                    op.price as Open,
-                    ba.High as High,
-                    ba.Low as Low,
-                    cl.price as Close
-                from
-                    (
-                        select
-                            max(price) as High,
-                            min(price) as Low,
-                            min(id) as open_id,
-                            max(id) as close_id,
-                            sec_to_time(time_to_sec(Date) - time_to_sec(Date) %{periods}) as intervals
-                        from
-                            execution_history
-                        group by
-                            intervals
-                        order by
-                            max(date) desc
-                        limit {tail}
-                    ) ba
-                    inner join
-                        execution_history op
-                    on  op.id = ba.open_id
-                    inner join
-                        execution_history cl
-                    on  cl.id = ba.close_id
-                order by
-                    Date
-                """.format(periods=periods, tail=tail)
-
-        historical_price = repository.read_sql(database=self.DATABASE, sql=sql)
-
-        if not historical_price.empty and clean_db:
-            first_Date = historical_price.loc[0]["Date"]
-            sql = "delete from execution_history where date < '{first_Date}'"\
-                .format(first_Date=first_Date)
-            repository.execute(database=self.DATABASE, sql=sql, write=False)
-        return historical_price

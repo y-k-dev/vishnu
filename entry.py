@@ -1,30 +1,27 @@
-from lib import bitflyer, indicator, message, repository
-from lib.config import MA, Bitflyer, TimeFrame
+import traceback
+
+import pandas as pd
+
+from lib import bitflyer, message, repository
+from lib.config import Bitflyer, HistoricalPrice
 
 
-def get_historical_price(periods: int, tail: int, clean_db=False):
-    data = bitflyer.get_historical_price(periods, tail, clean_db)
+def get_historical_price() -> pd.DataFrame or None:
+    try:
+        limit = CHANNEL_BAR_NUM + 1
+        historical_price = bitflyer.get_historical_price(limit=limit)
+        if len(historical_price) != limit:
+            return None
 
-    data["Price"] = (data["Open"] +
-                     data["High"] +
-                     data["Low"] +
-                     data["Close"]) / 4
+        df = historical_price["Volume"]
+        sma = df.rolling(VOLUME_MA).mean()[:VOLUME_MA]
+        historical_price["ema"] = pd.concat([sma, df[VOLUME_MA:]]).ewm(
+            span=VOLUME_MA, adjust=False).mean()
 
-    data = data.drop(columns="Open")
-    data = data.drop(columns="High")
-    data = data.drop(columns="Low")
-    data = data.drop(columns="Close")
-    return data
-
-
-def get_ma_data(periods: int, ma: int, column_name: str, clean_db=False):
-    data = get_historical_price(periods, ma * 2, clean_db)
-    if len(data) < 2:
+        return historical_price
+    except Exception:
+        message.error(traceback.format_exc())
         return None
-
-    data = indicator.add_ema(df=data, value=ma, column_name=column_name)
-    data = data.drop(columns="Price")
-    return data.iloc[len(data) - 2]
 
 
 def save_entry(side):
@@ -33,44 +30,44 @@ def save_entry(side):
     repository.execute(database=DATABASE, sql=sql, write=False)
 
 
-LONG_MA = MA.LONG.value
-LONG_TIME_FRAME = TimeFrame.LONG.value
+TIME_FRAME = HistoricalPrice.TIME_FRAME.value
+CHANNEL_WIDTH = HistoricalPrice.CHANNEL_WIDTH.value
+CHANNEL_BAR_NUM = TIME_FRAME * CHANNEL_WIDTH
 
-SHORT_MA = MA.SHORT.value
-SHORT_TIME_FRAME = TimeFrame.SHORT.value
-
-DATABASE = "tradingbot"
+VOLUME_MA = HistoricalPrice.VOLUME_MA.value
+DIFF_RATIO = HistoricalPrice.DIFF_RATIO.value
+BACK_MIN = HistoricalPrice.BACK_MIN.value
 
 bitflyer = bitflyer.API(api_key=Bitflyer.Api.value.KEY.value,
                         api_secret=Bitflyer.Api.value.SECRET.value)
 
+DATABASE = "tradingbot"
 
-before_Date = None
 has_buy = False
 has_sell = False
 while True:
-    long_ma_data = get_ma_data(LONG_TIME_FRAME, LONG_MA, "long_ma", True)
-    Date = long_ma_data["Date"]
-
-    if before_Date == Date:
+    hp = get_historical_price()
+    if hp is None:
         continue
 
-    short_ma_data = get_ma_data(SHORT_TIME_FRAME, SHORT_MA, "short_ma")
+    i = len(hp) - 1
+    v2_data = hp.iloc[i]
 
-    short_ma = short_ma_data["short_ma"]
-    long_ma = long_ma_data["long_ma"]
+    i = len(hp) - 2
+    v1_data = hp.iloc[i]
 
-    should_buy = short_ma < long_ma and not has_buy
-    should_sell = short_ma > long_ma and not has_sell
+    has_signal = v2_data["ema"] / v1_data["ema"] > DIFF_RATIO
 
-    if should_buy:
-        save_entry(side="BUY")
-        has_buy = True
-        has_sell = False
+    if has_signal:
+        i = len(hp) - (1 + BACK_MIN)
+        fr_data = hp.iloc[i]
+        to_data = v2_data
 
-    if should_sell:
-        save_entry(side="SELL")
-        has_buy = False
-        has_sell = True
-
-    before_Date = Date
+        if fr_data["Close"] > to_data["Close"]:
+            save_entry(side="BUY")
+            has_buy = True
+            has_sell = False
+        else:
+            save_entry(side="SELL")
+            has_buy = False
+            has_sell = True

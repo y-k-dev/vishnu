@@ -14,15 +14,18 @@ bitflyer-lightning（btcfxjpy）用のビットコイン自動売買botです。
 asset 1,000,000  
 
 **backtest result**：  
-2019-10-02 02:30:00 〜 2020-11-20 18:45:00  
-profit 11248529559693262653512762240532480  
-pf 20.96  
-wp 86 %   
-max elapsed sec 74700  
-med elapsed sec 900  
-trading cnt 22431  
+2019-10-06 15:47:00 〜 2020-10-19 22:03:00  
+profit 2,532,065  
+pf 2.47  
+wp 64 %  
+trading cnt 99  
 
-<a href="https://imgur.com/CV1LCtM"><img src="https://i.imgur.com/CV1LCtM.png" title="source: imgur.com" /></a>
+profit flow  
+<a href="https://imgur.com/CbpHpBq"><img src="https://i.imgur.com/CbpHpBq.png" title="source: imgur.com" /></a>  
+
+entry timing  
+▲ BUY ▼ SELL  
+<a href="https://imgur.com/GB9GBWT"><img src="https://i.imgur.com/GB9GBWT.png" title="source: imgur.com" /></a>
 
 ---  
 ### 環境  
@@ -68,13 +71,14 @@ sudo apt install -y mpg123
 ```
 
 **レバレッジ**：  
-このシステムでは、レバレッジ4倍分のポジションサイズをとります。  
+bitflyerでは4倍を設定してください。  
+このシステムは、レバレッジ2倍分のポジションサイズをとります。  
 ポジションサイズの変更は**lib/bitflyer.py**のコンストラクタで設定してください。  
 ```python:bitflyer.py
     def __init__(self, api_key, api_secret):
         self.api = pybitflyer.API(api_key=api_key, api_secret=api_secret)
         self.PRODUCT_CODE = "FX_BTC_JPY"
-        self.LEVERAGE = 4
+        self.LEVERAGE = 2
         self.DATABASE = "tradingbot"
 ```
 ---  
@@ -94,4 +98,4 @@ sh vishnu/main/execute.sh
 ```
 ---  
 ### main process  
-<a href="https://imgur.com/2HCQPNW"><img src="https://i.imgur.com/2HCQPNW.png" title="source: imgur.com" /></a>
+<a href="https://imgur.com/D9MlxAZ"><img src="https://i.imgur.com/D9MlxAZ.png" title="source: imgur.com" /></a>
