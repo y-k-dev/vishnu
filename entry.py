@@ -63,11 +63,12 @@ while True:
         fr_data = hp.iloc[i]
         to_data = v2_data
 
-        if fr_data["Close"] > to_data["Close"]:
+        if fr_data["Close"] > to_data["Close"] and not has_buy:
             save_entry(side="BUY")
             has_buy = True
             has_sell = False
-        else:
+
+        if fr_data["Close"] < to_data["Close"] and not has_sell:
             save_entry(side="SELL")
             has_buy = False
             has_sell = True
